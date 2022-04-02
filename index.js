@@ -4,12 +4,17 @@ const fetch = require('node-fetch')
 /**
  * Fetches unresolved JIRA issues for a user
  */
-const fetchIssues = (workspaceUrl, email, apiKey) => {
-  const auth = Buffer.from(`${email}:${apiKey}`).toString('base64')
+const fetchIssues = (workspaceUrl, name, password, email, apiKey) => {
+  let username = name
+  let token = password
+  if (!name) {
+    username = email.replace('@', '\\u0040') // Escape @ character
+    token = apiKey
+  }
+  const auth = Buffer.from(`${username}:${token}`).toString('base64')
   const headers = new fetch.Headers({
     Authorization: `Basic ${auth}`
   })
-  const username = email.replace('@', '\\u0040') // Escape @ character
   const query = `assignee=${username}+and+resolution=unresolved`
   const fields = 'summary,updated'
   return fetch(
@@ -29,10 +34,12 @@ exports.activate = async context => {
   const config = workspace.getConfiguration('jira')
 
   const workspaceUrl = config.get('workspaceUrl')
+  const name = config.get('user.name')
+  const password = config.get('user.password')
   const email = config.get('user.email')
   const apiKey = config.get('user.apiKey')
 
-  if (!workspaceUrl || !email || !apiKey) {
+  if (!workspaceUrl || ((!name || !password) && (!email || !apiKey))) {
     workspace.showMessage(
       'JIRA configuration missing from :CocConfig',
       'warning'
@@ -42,7 +49,7 @@ exports.activate = async context => {
 
   let issues = []
   try {
-    issues = await fetchIssues(workspaceUrl, email, apiKey)
+    issues = await fetchIssues(workspaceUrl, name, password, email, apiKey)
   } catch (error) {
     workspace.showMessage(
       'Failed to fetch JIRA issues, check :CocOpenLog',
